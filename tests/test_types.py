@@ -1,0 +1,86 @@
+"""Unit tests for laya_as_judge.types."""
+
+import pytest
+from laya_as_judge.types import (
+    ChoiceResult,
+    DecisionType,
+    EvaluationReport,
+    NoulResult,
+    ScoreResult,
+)
+
+
+def test_score_result():
+    res = ScoreResult(
+        name="relevance",
+        confidence=0.85,
+        score=2.65,
+        legend={"0": "bad", "1": "okay", "2": "good", "3": "excellent"},
+        level_probabilities={"0": 0.05, "1": 0.10, "2": 0.35, "3": 0.50},
+    )
+    assert res.decision_type == DecisionType.SCORE
+    assert res.score == 2.65
+    assert res.is_high_confidence is True
+    d = res.to_dict()
+    assert d["score"] == 2.65
+    assert d["decision_type"] == "score"
+
+
+def test_choice_result():
+    res = ChoiceResult(
+        name="routing",
+        confidence=0.92,
+        choice="billing",
+        probabilities={"billing": 0.92, "technical": 0.05, "sales": 0.03},
+    )
+    assert res.decision_type == DecisionType.CHOICE
+    assert res.choice == "billing"
+    d = res.to_dict()
+    assert d["choice"] == "billing"
+    assert d["probabilities"]["billing"] == 0.92
+
+
+def test_noul_result():
+    res = NoulResult(
+        name="is_safe",
+        confidence=0.95,
+        holds=True,
+        prob_true=0.95,
+    )
+    assert res.decision_type == DecisionType.NOUL
+    assert res.holds is True
+    assert res.prob_true == 0.95
+
+
+def test_evaluation_report_helpers():
+    score_res = ScoreResult(name="coherence", confidence=0.8, score=2.8)
+    noul_res = NoulResult(name="is_factual", confidence=0.9, holds=True, prob_true=0.9)
+    choice_res = ChoiceResult(name="winner", confidence=0.85, choice="model_a")
+
+    report = EvaluationReport(
+        state={"text": "test"},
+        judgements={
+            "coherence": score_res,
+            "is_factual": noul_res,
+            "winner": choice_res,
+        },
+        latency_ms=12.5,
+        input_tokens=150,
+        output_tokens=0,
+    )
+
+    assert report.get_score("coherence") == 2.8
+    assert report.get_bool("is_factual") is True
+    assert report.get_choice("winner") == "model_a"
+    assert report.get_confidence("winner") == 0.85
+    assert report.output_tokens == 0
+    assert report.cost_usd == 0.0
+    assert report.average_confidence == pytest.approx((0.8 + 0.9 + 0.85) / 3.0)
+
+    # Key errors when types mismatch
+    with pytest.raises(KeyError):
+        report.get_score("is_factual")
+    with pytest.raises(KeyError):
+        report.get_bool("winner")
+    with pytest.raises(KeyError):
+        report.get_choice("coherence")
