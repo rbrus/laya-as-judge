@@ -442,3 +442,7 @@ Contributions are warmly welcomed! Please see [CONTRIBUTING.md](CONTRIBUTING.md)
 - **License:** Apache License 2.0. See [LICENSE](LICENSE) for details.
 - **Upstream Laya Model:** Developed by [Convai Innovations](https://huggingface.co/convaiinnovations/laya).
 - **Laya-MLX Runtime:** Native Apple Silicon MLX port developed by [mizorewww/laya-mlx](https://github.com/mizorewww/laya-mlx).
+
+---
+
+*Part of a broader AI-agent security R&D effort — reach an agent, attack it, judge the result, defend what it can touch. A larger, integrated toolkit is in the works. More in 2026.*
