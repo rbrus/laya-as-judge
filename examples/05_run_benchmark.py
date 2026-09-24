@@ -1,14 +1,16 @@
 """Example 05: Benchmark Runner comparing Laya vs LLM-as-a-Judge.
 
-Measures latency distribution (P50, P95), throughput (evals/sec),
-token generation overhead, and economic savings on realistic dataset runs.
+Measures Laya-side latency distribution (P50, P95) and throughput on synthetic
+samples. No LLM is called: the LLM-as-a-Judge column is a simulated baseline
+built from assumed typical figures (see BenchmarkRunner). Pass `llm_judge_fn`
+to BenchmarkRunner to measure a real LLM judge instead.
 """
 
 from laya_as_judge import FaithfulnessJudge, BenchmarkRunner
 
 def main():
     print("=" * 70)
-    print("Example 05: Laya-as-a-Judge Empirical Benchmark")
+    print("Example 05: Laya-as-a-Judge Benchmark (LLM baseline simulated)")
     print("=" * 70)
 
     judge = FaithfulnessJudge()
@@ -26,9 +28,11 @@ def main():
 
     print(f"Running benchmark on {len(samples)} samples...")
     comp = runner.run(samples)
+    print(f"Laya backend: {comp.laya_backend}"
+          + ("  (heuristic emulator, not the Laya model)" if comp.laya_backend == "EmulatorBackend" else ""))
 
     print("\n" + "-" * 70)
-    print(f"{'Metric':<28} | {'Laya-as-a-Judge':<18} | {'LLM-as-a-Judge':<18}")
+    print(f"{'Metric':<28} | {'Laya-as-a-Judge':<18} | {'LLM (simulated)':<18}")
     print("-" * 70)
     print(f"{'P50 Latency (ms)':<28} | {comp.laya_p50_latency_ms:<18.2f} | {comp.llm_p50_latency_ms:<18.2f}")
     print(f"{'P95 Latency (ms)':<28} | {comp.laya_p95_latency_ms:<18.2f} | {comp.llm_p95_latency_ms:<18.2f}")

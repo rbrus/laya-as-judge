@@ -8,7 +8,6 @@ from laya_as_judge.engine import (
     confidence_from_probs,
     get_engine,
     render_options,
-    serialize_state,
     validate_question_spec,
 )
 
@@ -103,3 +102,13 @@ def test_factory_get_engine():
     # auto backend falls back safely when mlx/torch not on system
     auto_engine = get_engine("auto")
     assert isinstance(auto_engine, BaseDecisionEngine)
+
+
+def test_auto_backend_falls_back_to_emulator_without_mlx():
+    # On non-Apple-Silicon hosts (CI), "auto" must resolve to the emulator and must
+    # never silently pick the incomplete TorchBackend.
+    import platform
+
+    if platform.system() == "Darwin" and platform.machine() == "arm64":
+        pytest.skip("auto may select MLX on Apple Silicon")
+    assert isinstance(get_engine("auto"), EmulatorBackend)

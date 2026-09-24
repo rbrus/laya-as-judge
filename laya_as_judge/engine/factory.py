@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import logging
 import platform
-import sys
 from typing import Any, Optional
 
 from .base import BaseDecisionEngine
 from .emulator_backend import EmulatorBackend
 
 logger = logging.getLogger("laya_as_judge")
+
+_EMULATOR_NOTICE_SHOWN = False
 
 
 def get_engine(
@@ -55,23 +56,20 @@ def get_engine(
             except Exception as e:
                 logger.debug("MLX backend not available on Darwin: %s", e)
 
-        # 2. Check for PyTorch & Transformers
-        try:
-            import torch
-            import transformers  # noqa: F401
-            from .torch_backend import TorchBackend
-            mid = model_id or "convaiinnovations/laya"
-            logger.info("Auto-detected PyTorch environment: Initializing Torch backend.")
-            return TorchBackend(model_id=mid, **kwargs)
-        except Exception as e:
-            logger.debug("PyTorch backend not available: %s", e)
+        # 2. PyTorch is deliberately NOT auto-selected: TorchBackend does not yet run
+        #    the Laya network (see torch_backend.py). Request it explicitly with
+        #    backend="torch" if you want to work on it.
 
-        # 3. Fallback to calibrated zero-dependency EmulatorBackend
-        logger.info(
-            "Using calibrated EmulatorBackend (fast, zero external GPU dependencies). "
-            "For native hardware acceleration, install 'laya-as-judge[mlx]' (macOS) "
-            "or 'laya-as-judge[torch]' (Linux/CUDA)."
-        )
+        # 3. Fallback to the heuristic EmulatorBackend (no model weights involved)
+        global _EMULATOR_NOTICE_SHOWN
+        if not _EMULATOR_NOTICE_SHOWN:
+            _EMULATOR_NOTICE_SHOWN = True
+            logger.warning(
+                "laya-as-judge: no Laya model runtime found; using EmulatorBackend. "
+                "The emulator is a keyword/regex heuristic, NOT the Laya model: its "
+                "verdicts and probabilities are illustrative only. Install "
+                "'laya-as-judge[mlx]' on Apple Silicon for real model inference."
+            )
         mid = model_id or "convaiinnovations/laya-emulator"
         return EmulatorBackend(model_id=mid, **kwargs)
 

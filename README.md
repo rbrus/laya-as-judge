@@ -2,14 +2,28 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-brightgreen.svg)](https://www.python.org/)
-[![Output Tokens](https://img.shields.io/badge/Output_Tokens-0-orange.svg)](#the-logic-behind-it)
-[![Latency](https://img.shields.io/badge/Latency-7--14ms-success.svg)](#performance--benchmarks)
-[![Cloud Cost](https://img.shields.io/badge/Cloud_Cost-%240.00-gold.svg)](#reasoning-why-its-worth-doing)
+[![Output Tokens](https://img.shields.io/badge/Output_Tokens-0-orange.svg)](#the-logic-behind-it-architecture--math)
+[![Cloud Cost](https://img.shields.io/badge/Cloud_Cost-%240.00-gold.svg)](#reasoning-why-its-worth-doing-and-using)
 [![CI](https://github.com/rbrus/laya-as-judge/actions/workflows/ci.yml/badge.svg)](https://github.com/rbrus/laya-as-judge/actions)
 
 > **Blazing fast, token-free, calibrated LLM and AI agent evaluation using [Laya](https://huggingface.co/convaiinnovations/laya) typed decision models instead of slow, expensive, and fragile autoregressive "LLM-as-a-Judge".**
 >
-> Inspired by and built for native local runtimes like [mizorewww/laya-mlx](https://github.com/mizorewww/laya-mlx) on Apple Silicon and PyTorch on Linux/CUDA.
+> Inspired by and built for native local runtimes like [mizorewww/laya-mlx](https://github.com/mizorewww/laya-mlx) on Apple Silicon.
+
+> [!IMPORTANT]
+> **What you get out of the box.** A plain `pip install -e .` gives you the judge API, CLI and examples running on the
+> **`EmulatorBackend`**, which is **not the Laya model**. The emulator loads no weights; it is a small keyword/regex
+> heuristic (word overlap with the rubric text, plus a fixed list of "risky" patterns) that returns answers in Laya's
+> output format. Its verdicts are often wrong and its probabilities are **not calibrated**. It exists so you can build
+> and test pipelines anywhere, including CI.
+>
+> Real Laya inference currently requires the **MLX backend** (`pip install -e '.[mlx]'` on Apple Silicon), which wraps
+> [laya-mlx](https://github.com/mizorewww/laya-mlx) and downloads the model weights from Hugging Face. The **PyTorch
+> backend is an incomplete scaffold**: it loads only the tokenizer and returns uniform distributions, so it is never
+> auto-selected. The latency, throughput and calibration figures in this README describe the real Laya model as
+> reported upstream; they are not produced by the emulator.
+>
+> When `backend="auto"` falls back to the emulator, the library logs a warning, and the CLI prints the backend in use.
 
 ---
 
@@ -36,7 +50,7 @@
   - [6. High-Throughput Batch Dataset Evaluation](#6-high-throughput-batch-dataset-evaluation)
 - [Command Line Interface (CLI)](#command-line-interface-cli)
 - [Hardware & Engine Backends](#hardware--engine-backends)
-- [Performance & Parity Benchmarks](#performance--benchmarks)
+- [Performance & Parity Benchmarks](#performance--parity-benchmarks)
 - [Contributing](#contributing)
 - [License & Acknowledgments](#license--acknowledgments)
 
@@ -90,10 +104,10 @@ Modern AI engineering relies heavily on **LLM-as-a-Judge** (prompting GPT-4o, Cl
 ```
 
 - **0 Output Tokens:** No token decoding loop. Inference is a single bidirectional forward pass.
-- **7–14 ms Latency:** Evaluates up to **100x faster** than cloud LLM judges.
-- **$0.00 Cloud Cost:** 100% local inference on Apple Silicon (MLX) or Linux/CUDA (PyTorch).
+- **7–14 ms Latency:** Evaluates up to **100x faster** than cloud LLM judges (upstream laya-mlx figures on Apple Silicon).
+- **$0.00 Cloud Cost:** 100% local inference on Apple Silicon (MLX).
 - **100% Typed Reliability:** Impossible to produce a JSON parse failure; returns native Python dataclasses.
-- **Calibrated Probabilities:** Trained with Reinforcement Learning against Strictly Proper Scoring Rules (RLCD).
+- **Calibrated Probabilities:** The Laya model is trained with Reinforcement Learning against Strictly Proper Scoring Rules (RLCD). This applies to the real model only, not to the `EmulatorBackend`.
 
 ---
 
@@ -151,9 +165,11 @@ $$\text{Confidence} = 1.0 - \frac{H(p)}{\ln(K)} \quad (\text{for } K \ge 2)$$
 
 ### Side-by-Side Comparison
 
+The Laya column describes the real Laya model as reported by the upstream projects; the LLM column gives typical published ranges for hosted LLM judges. Neither column is measured by this repository.
+
 | Feature | LLM-as-a-Judge (GPT-4o / Claude 3.5) | Laya-as-a-Judge (Laya-MLX / Torch) |
 |---|---|---|
-| **P50 Latency** | 1,500 – 3,500 ms | **7.4 – 13.4 ms (MLX) / ~20 ms (CUDA)** |
+| **P50 Latency** | 1,500 – 3,500 ms | **7.4 – 13.4 ms (MLX)** |
 | **Output Tokens** | 200 – 500 tokens per eval | **0 tokens (no decoding loop)** |
 | **Cost per 1k Evals** | $25.00 – $60.00 | **$0.00 (Local / Edge)** |
 | **Throughput (1 GPU)** | 0.5 – 2 queries/sec | **140 – 395 queries/sec** |
@@ -174,7 +190,7 @@ Consider an enterprise running **10,000 requests/day** with a 3-criterion evalua
 
 ### The Speculative Cascaded Judge Pattern
 
-You don't have to choose between Laya and frontier models. With `CascadedJudge`, you use Laya as an ultra-fast **Tier 1 judge**:
+You don't have to choose between Laya and frontier models. With `CascadedJudge`, you use Laya as an ultra-fast **Tier 1 judge** (the traffic split below is illustrative; the real ratio depends on your data, the model and the threshold you pick):
 
 ```mermaid
 flowchart LR
@@ -185,9 +201,10 @@ flowchart LR
     E --> F["Escalated Verdict Delivered"]
 ```
 
-- **90–95% of evaluations** are resolved in 10ms for free.
+- **90–95% of evaluations** (illustrative target) are resolved in 10ms for free.
 - Only the ambiguous 5–10% are sent to cloud APIs.
 - Slashes **90%+ off total evaluation bills** while preserving frontier quality on edge cases.
+- Note: on the `EmulatorBackend`, confidences are low and most items escalate (see `examples/04_cascaded_speculative_judge.py`).
 
 ---
 
@@ -198,19 +215,29 @@ flowchart LR
 git clone https://github.com/rbrus/laya-as-judge.git
 cd laya-as-judge
 
-# Basic installation (includes calibrated zero-dependency local emulator)
+# Basic installation: API, CLI and the heuristic EmulatorBackend (no model weights)
 pip install -e .
 
-# For Apple Silicon hardware acceleration with native MLX:
+# Real Laya inference on Apple Silicon via laya-mlx (downloads weights from Hugging Face):
 pip install -e '.[mlx]'
 
-# For Linux / NVIDIA CUDA / AMD / CPU PyTorch acceleration:
+# Experimental, INCOMPLETE PyTorch backend (does not run the model yet; see "Hardware & Engine Backends"):
 pip install -e '.[torch]'
+
+# Development (tests):
+pip install -e '.[dev]'
+pytest
 ```
+
+Requires Python 3.9+ (the `[mlx]` extra needs Python 3.11+, because `laya-mlx` does). CI runs the test suite on Python 3.9 to 3.12 using the emulator.
 
 ---
 
 ## Quickstart & Code Examples
+
+All snippets below run as-is from the repository root (snippet 6 reads `data/sample_rag_eval.jsonl`). Without the MLX
+runtime they run on the `EmulatorBackend`, so the printed verdicts are heuristic and may differ from the comments,
+which describe what the real Laya model is expected to return. More complete scripts live in [`examples/`](examples/).
 
 ### 1. RAG Faithfulness & Hallucination Checking
 
@@ -358,19 +385,26 @@ laya-judge eval --judge faithfulness --file data/sample_rag_eval.jsonl
 laya-judge benchmark --count 25
 ```
 
+The benchmark times the Laya backend you actually have (usually the emulator) against a **simulated** LLM-as-a-Judge
+baseline: no LLM is called, and the LLM latencies, token counts, costs and parse-failure rate are synthetic values
+drawn from assumed typical figures. To measure a real LLM judge, use `BenchmarkRunner(judge, llm_judge_fn=...)` from Python.
+
+All commands accept `--backend {auto,mlx,torch,emulator}` (default `auto`).
+
 ---
 
 ## Hardware & Engine Backends
 
-`laya-as-judge` includes an adaptive engine factory that auto-detects your platform:
+`laya-as-judge` includes an engine factory. With `backend="auto"` it tries MLX on Apple Silicon and otherwise falls back
+to the emulator (logging a warning when it does):
 
-| Backend | Hardware Target | Implementation | Typical Latency |
+| Backend | Hardware Target | What it actually is | Status |
 |---|---|---|---|
-| **`MLXBackend`** | Apple Silicon (M1/M2/M3/M4) | Native MLX via [laya-mlx](https://github.com/mizorewww/laya-mlx) | **7 – 14 ms** |
-| **`TorchBackend`** | Linux / NVIDIA GPU / AMD / CPU | PyTorch & Hugging Face Transformers | **15 – 35 ms** |
-| **`EmulatorBackend`** | Any CPU / CI Runners | Calibrated zero-dependency emulator | **< 1 ms** |
+| **`MLXBackend`** | Apple Silicon (M1/M2/M3/M4) | Real Laya model via [laya-mlx](https://github.com/mizorewww/laya-mlx); weights downloaded from Hugging Face | Real inference. Upstream reports 7 – 14 ms per question. Not exercised in this repo's CI (Linux runners). |
+| **`TorchBackend`** | Linux / NVIDIA GPU / AMD / CPU | Scaffold: downloads the checkpoint and loads the tokenizer, but **does not load the encoder or heads** | **Incomplete.** Returns uniform distributions (confidence 0). Never auto-selected; emits a `RuntimeWarning`. |
+| **`EmulatorBackend`** | Any CPU / CI runners | **Heuristic, not a model**: word overlap between the input and each option's rubric text, plus regex matches for a fixed list of risky phrases, mapped to fixed probabilities | Default fallback. Sub-millisecond. Good for testing pipelines and schemas; **not** for judging quality. |
 
-Specify a backend explicitly or let `auto` select the best hardware acceleration:
+Specify a backend explicitly or let `auto` pick:
 
 ```python
 from laya_as_judge import FaithfulnessJudge
@@ -382,7 +416,10 @@ judge = FaithfulnessJudge(backend="auto")  # or "mlx", "torch", "emulator"
 
 ## Performance & Parity Benchmarks
 
-Measurements conducted on Apple Silicon (M3 Max, 40 GPU cores, MLX runtime) and NVIDIA hardware:
+Figures for the real Laya checkpoints on Apple Silicon (M3 Max, 40 GPU cores, MLX runtime), as reported for the
+upstream Laya / laya-mlx runtime. They are **not** reproduced by this repository's CI, and the "Traditional LLM Judge"
+column is a typical reference range, not a controlled measurement. `laya-judge benchmark` on the emulator measures only
+the heuristic's speed.
 
 | Metric | Laya 421M (English) | Laya 322M (Multilingual) | Traditional LLM Judge |
 |---|---:|---:|---:|

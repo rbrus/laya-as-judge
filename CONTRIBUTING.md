@@ -28,7 +28,7 @@ We welcome contributions of all kinds: bug fixes, new judge rubrics, hardware ba
    # If developing on Apple Silicon with MLX:
    pip install -e '.[dev,mlx]'
 
-   # If developing with PyTorch / Hugging Face:
+   # If working on the (currently incomplete) PyTorch backend:
    pip install -e '.[dev,torch]'
    ```
 
@@ -42,7 +42,7 @@ Run the test suite with `pytest`:
 pytest -v
 ```
 
-All 24+ unit and integration tests run in under 1 second using the calibrated emulator backend without needing external GPU hardware or multi-gigabyte weight downloads.
+The test suite runs in about a second on the heuristic `EmulatorBackend`, so it needs no GPU and no weight downloads. Note that this means the tests check the API, schemas and plumbing, not the quality of real Laya model verdicts.
 
 ---
 

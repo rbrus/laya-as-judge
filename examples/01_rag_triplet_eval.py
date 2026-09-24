@@ -3,7 +3,6 @@
 Replaces a slow 2,000ms GPT-4o evaluation with a sub-15ms, zero-token Laya forward pass.
 """
 
-import json
 from laya_as_judge import FaithfulnessJudge, AnswerRelevanceJudge
 
 def main():
@@ -11,7 +10,7 @@ def main():
     print("Example 01: High-Speed RAG Triplet Evaluation")
     print("=" * 70)
 
-    # 1. Initialize Evaluators (auto-detects MLX, PyTorch, or local calibrated engine)
+    # 1. Initialize Evaluators (auto-detects the MLX runtime; otherwise falls back to the heuristic emulator)
     faith_judge = FaithfulnessJudge()
     relevance_judge = AnswerRelevanceJudge()
 

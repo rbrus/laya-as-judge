@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Optional
 
 import click
@@ -13,7 +12,6 @@ from rich.table import Table
 
 from .batch import BatchEvaluator
 from .benchmark import BenchmarkRunner
-from .engine import get_engine
 from .judges import (
     AgentTrajectoryJudge,
     AnswerRelevanceJudge,
@@ -80,7 +78,10 @@ def eval(judge: str, input_text: Optional[str], file_path: Optional[str], backen
     judge_instance = judge_cls(backend=backend)
 
     if file_path:
-        console.print(f"[bold green]Running batch evaluation with {judge_cls.__name__} on {file_path}...[/bold green]")
+        console.print(
+            f"[bold green]Running batch evaluation with {judge_cls.__name__} "
+            f"({type(judge_instance.engine).__name__}) on {file_path}...[/bold green]"
+        )
         batch_evaluator = BatchEvaluator(judge=judge_instance)
         report = batch_evaluator.evaluate_jsonl(file_path)
 
@@ -164,7 +165,8 @@ def benchmark(count: int, backend: str):
     """Run head-to-head benchmark comparing Laya-as-a-Judge against traditional LLM-as-a-Judge."""
     console.print(Panel.fit(
         "[bold cyan]Head-to-Head Benchmark[/bold cyan]: [bold white]Laya-as-a-Judge vs LLM-as-a-Judge[/bold white]\n"
-        "[dim]Simulating 3-criteria evaluation pass (RAG Faithfulness, Relevance, Safety)[/dim]"
+        "[dim]Runs FaithfulnessJudge (3 criteria) on synthetic samples. The LLM-as-a-Judge column is a\n"
+        "SIMULATED baseline built from assumed figures; no LLM is called.[/dim]"
     ))
 
     judge = FaithfulnessJudge(backend=backend)
@@ -184,8 +186,8 @@ def benchmark(count: int, backend: str):
 
     table = Table(title="Benchmark Comparison Results", show_lines=True)
     table.add_column("Metric", style="cyan", no_wrap=True)
-    table.add_column("Laya-as-a-Judge", style="bold green")
-    table.add_column("LLM-as-a-Judge (GPT-4o / Claude)", style="bold red")
+    table.add_column(f"Laya-as-a-Judge ({comp.laya_backend})", style="bold green")
+    table.add_column("LLM-as-a-Judge (simulated)", style="bold red")
     table.add_column("Advantage", style="bold yellow")
 
     table.add_row(
@@ -226,6 +228,11 @@ def benchmark(count: int, backend: str):
     )
 
     console.print(table)
+    if comp.laya_backend == "EmulatorBackend":
+        console.print(
+            "[yellow]Note: Laya timings above come from the heuristic EmulatorBackend, not the Laya "
+            "model. Real model latency depends on your hardware and runtime.[/yellow]"
+        )
 
 
 @main.command()
@@ -241,8 +248,15 @@ def demo():
     ))
 
     # Demo 1
-    console.print("\n[bold yellow]── Demo 1: RAG Faithfulness & Hallucination Check ──[/bold yellow]")
     faith_judge = FaithfulnessJudge()
+    backend_name = type(faith_judge.engine).__name__
+    console.print(f"[dim]Backend: {backend_name}[/dim]")
+    if backend_name == "EmulatorBackend":
+        console.print(
+            "[yellow]Running on the heuristic EmulatorBackend (no Laya weights loaded). "
+            "Verdicts below illustrate the API and output schema only.[/yellow]"
+        )
+    console.print("\n[bold yellow]── Demo 1: RAG Faithfulness & Hallucination Check ──[/bold yellow]")
     rag_state = {
         "query": "What is the capital of Mars?",
         "context": "Human exploration of Mars has not established permanent settlements or official capitals.",

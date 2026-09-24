@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from .judges.base import BaseJudge
 from .types import EvaluationReport
@@ -55,7 +55,6 @@ class CascadedJudge:
     ) -> EvaluationReport:
         """Run speculative cascaded evaluation."""
         self.stats["total_evals"] += 1
-        t0 = time.perf_counter()
 
         # Step 1: Run fast local Laya judge
         report = self.tier1_judge.evaluate(state, metadata=metadata)
@@ -94,6 +93,7 @@ class CascadedJudge:
         report.latency_ms = round(total_latency, 2)
         report.cost_usd = self.estimated_llm_cost_per_eval
         report.model = f"cascaded (tier1={report.model}, tier2=llm-judge)"
+        report.metadata["speculative_tier"] = "tier2_llm"
         report.metadata["escalated_to_llm"] = True
         report.metadata["tier2_llm_result"] = llm_result
 

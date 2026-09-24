@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -19,9 +20,13 @@ from .base import (
 
 
 class TorchBackend(BaseDecisionEngine):
-    """PyTorch / HuggingFace backend for Laya typed decision models.
+    """EXPERIMENTAL, INCOMPLETE PyTorch backend for Laya typed decision models.
 
-    Runs on Linux, Windows, or macOS with CUDA, ROCm, MPS, or CPU.
+    Status: this backend downloads the checkpoint and loads the tokenizer, but it
+    does not yet load the encoder or decision-head weights. Every question
+    therefore receives a uniform probability distribution (zero confidence).
+    It exists as a scaffold for a future port and is never auto-selected;
+    use the MLX backend (Apple Silicon) for real Laya inference.
     """
 
     def __init__(
@@ -31,6 +36,12 @@ class TorchBackend(BaseDecisionEngine):
         torch_dtype: str = "float16",
     ):
         super().__init__(model_id=model_id)
+        warnings.warn(
+            "TorchBackend is an incomplete scaffold: it does not run the Laya network "
+            "and returns uniform (uninformative) distributions for every question.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         try:
             import torch
             from huggingface_hub import snapshot_download
@@ -91,7 +102,7 @@ class TorchBackend(BaseDecisionEngine):
             k = len(opts)
             # Default temperature
             t_val = self.cfg.get("temperature", [1.0, 1.0, 1.0])[0]
-            # Probabilities derived from state alignment
+            # Placeholder: the Laya encoder/heads are not loaded yet, so logits are zero
             raw_logits = np.zeros(k, dtype=np.float32)
             # Softmax
             scaled = raw_logits / max(0.1, t_val)

@@ -46,6 +46,7 @@ def test_cascaded_judge_escalation_path():
     report = cascade.evaluate({"query": "q", "context": "c", "answer": "a"})
     assert llm_called is True
     assert report.metadata["escalated_to_llm"] is True
+    assert report.metadata["speculative_tier"] == "tier2_llm"
     assert cascade.stats["tier2_escalated"] == 1
     assert report.cost_usd == 0.03
 

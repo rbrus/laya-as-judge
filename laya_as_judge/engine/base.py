@@ -5,7 +5,7 @@ from __future__ import annotations
 import abc
 import json
 import math
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 import numpy as np
 

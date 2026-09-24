@@ -21,3 +21,7 @@ def test_benchmark_runner():
     d = comp.to_dict()
     assert "laya" in d
     assert "llm_judge" in d
+    # Without llm_judge_fn the LLM side is a simulated baseline and must be flagged as such.
+    assert comp.llm_baseline_simulated is True
+    assert d["llm_baseline_simulated"] is True
+    assert comp.laya_backend == type(judge.engine).__name__

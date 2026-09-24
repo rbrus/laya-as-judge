@@ -1,11 +1,18 @@
-"""High-speed calibrated decision emulator for local development, CI/CD, and testing.
+"""Heuristic stand-in for the Laya model, for local development, CI, and tests.
 
-Simulates Laya's non-autoregressive decision model behavior:
-- 0 output tokens
-- <5ms execution time
-- Strict adherence to 'choice', 'score', and 'noul' primitives
-- Exact normalized Shannon entropy confidence calculation
-- Calibration against strictly proper scoring rules
+IMPORTANT: this is NOT the Laya model and does not load any weights. It mimics
+Laya's *output schema* (choice / score / noul answers with probabilities and a
+normalized-entropy confidence, 0 output tokens) using simple text heuristics:
+
+- choice / score: word overlap between the state text and each option's rubric
+  text, pushed through a softmax;
+- noul: a fixed list of regex patterns (e.g. "bypass", "system prompt",
+  "password") combined with keyword matching on the question wording, mapped to
+  hard-coded probabilities.
+
+Its verdicts are therefore frequently wrong and its probabilities are not
+calibrated. Use it to exercise pipelines, schemas and plumbing, never to draw
+conclusions about the quality of the text being judged.
 """
 
 from __future__ import annotations
@@ -26,10 +33,10 @@ from .base import (
 
 
 class EmulatorBackend(BaseDecisionEngine):
-    """Calibrated lightweight emulator backend.
+    """Keyword/regex heuristic emulator backend (no model weights).
 
-    Requires zero heavy GPU dependencies. Enables instantaneous testing,
-    offline CI evaluation, and architectural simulation of Laya-as-a-Judge.
+    Requires no GPU or ML dependencies. Useful for testing, offline CI, and
+    exercising the Laya-as-a-Judge API; its outputs are not real model verdicts.
     """
 
     def __init__(self, model_id: str = "convaiinnovations/laya-emulator", seed: int = 42):
@@ -110,7 +117,7 @@ class EmulatorBackend(BaseDecisionEngine):
                     # check for level indicators or positive/negative keywords
                     level_affinities.append(aff)
 
-                # Generate calibrated distribution
+                # Turn overlap scores into a softmax distribution (heuristic, not calibrated)
                 aff_arr = np.array(level_affinities, dtype=np.float32)
                 if np.sum(aff_arr) > 0:
                     logits = aff_arr * 2.5

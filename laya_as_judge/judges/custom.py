@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Union
 
 from .base import BaseJudge
-from ..engine import BaseDecisionEngine, get_engine
+from ..engine import BaseDecisionEngine
 
 
 class CustomJudge(BaseJudge):

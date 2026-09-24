@@ -9,7 +9,6 @@ from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 
 from .judges.base import BaseJudge
-from .types import EvaluationReport
 
 
 @dataclass
@@ -32,12 +31,16 @@ class BenchmarkComparison:
 
     speedup_factor: float
     cost_reduction_factor: str
+    laya_backend: str = "unknown"
+    llm_baseline_simulated: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "sample_count": self.sample_count,
             "speedup_factor": f"{self.speedup_factor:.1f}x",
             "cost_reduction": self.cost_reduction_factor,
+            "laya_backend": self.laya_backend,
+            "llm_baseline_simulated": self.llm_baseline_simulated,
             "laya": {
                 "p50_latency_ms": self.laya_p50_latency_ms,
                 "p95_latency_ms": self.laya_p95_latency_ms,
@@ -117,7 +120,8 @@ class BenchmarkRunner:
                     llm_latencies.append((time.perf_counter() - t_item) * 1000.0)
             total_llm_time = time.perf_counter() - t0_llm
         else:
-            # Calibrated empirical industry baseline for GPT-4o / Claude 3.5 LLM-as-a-Judge
+            # SIMULATED baseline (no LLM is called): synthetic numbers drawn from assumed
+            # typical figures for a hosted LLM judge. These are assumptions, not measurements.
             # P50 ~1800ms, output ~220 tokens, cost ~$0.03 per judge call, ~6.5% JSON parse failures
             rng = np.random.default_rng(42)
             llm_latencies = (rng.normal(loc=1850.0, scale=350.0, size=n)).clip(min=900.0).tolist()
@@ -148,4 +152,6 @@ class BenchmarkRunner:
             llm_schema_failures=llm_schema_failures,
             speedup_factor=round(speedup, 1),
             cost_reduction_factor="100% ($0.00 vs cloud tokens)",
+            laya_backend=type(self.judge.engine).__name__,
+            llm_baseline_simulated=self.llm_judge_fn is None,
         )
