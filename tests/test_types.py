@@ -84,3 +84,46 @@ def test_evaluation_report_helpers():
         report.get_bool("winner")
     with pytest.raises(KeyError):
         report.get_choice("coherence")
+
+
+def test_evaluation_report_to_json_and_passed(tmp_path):
+    from laya_as_judge.types import BatchEvaluationReport
+
+    good_report = EvaluationReport(
+        state={"text": "clean"},
+        judgements={
+            "is_safe": NoulResult(name="is_safe", confidence=0.9, holds=True, prob_true=0.95),
+            "quality": ScoreResult(name="quality", confidence=0.8, score=2.5),
+        },
+        latency_ms=5.0,
+        input_tokens=100,
+    )
+    assert good_report.passed is True
+    json_str = good_report.to_json()
+    assert '"is_safe"' in json_str
+
+    bad_report = EvaluationReport(
+        state={"text": "attack"},
+        judgements={
+            "is_safe": NoulResult(name="is_safe", confidence=0.9, holds=False, prob_true=0.05),
+        },
+        latency_ms=5.0,
+        input_tokens=100,
+    )
+    assert bad_report.passed is False
+
+    batch = BatchEvaluationReport(
+        reports=[good_report, bad_report],
+        total_latency_ms=10.0,
+        average_latency_ms=5.0,
+        p50_latency_ms=5.0,
+        p95_latency_ms=5.0,
+        total_input_tokens=200,
+    )
+    assert '"sample_count": 2' in batch.to_json()
+
+    out_file = tmp_path / "out.jsonl"
+    batch.save_jsonl(out_file)
+    assert out_file.exists()
+    lines = out_file.read_text().strip().split("\n")
+    assert len(lines) == 2

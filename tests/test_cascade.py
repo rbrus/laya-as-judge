@@ -5,21 +5,25 @@ from laya_as_judge import CascadedJudge, FaithfulnessJudge
 
 def test_cascaded_judge_accepted_fast_path():
     judge = FaithfulnessJudge()
-    
+
     llm_called = False
     def mock_llm_fn(state, questions):
         nonlocal llm_called
         llm_called = True
         return {"verdict": "ok"}
 
-    # Set threshold very low (0.01) so Laya passes immediately
+    # Clear-cut case resolves at Tier 1 with realistic threshold (0.70)
     cascade = CascadedJudge(
         tier1_judge=judge,
         tier2_llm_judge_fn=mock_llm_fn,
-        confidence_threshold=0.01,
+        confidence_threshold=0.70,
     )
 
-    report = cascade.evaluate({"query": "q", "context": "c", "answer": "a"})
+    report = cascade.evaluate({
+        "query": "Where is the Eiffel Tower located?",
+        "context": "The Eiffel Tower is located in Paris, France.",
+        "answer": "The Eiffel Tower is in Paris, France.",
+    })
     assert llm_called is False
     assert report.metadata["escalated_to_llm"] is False
     assert cascade.stats["tier1_resolved"] == 1
@@ -28,7 +32,7 @@ def test_cascaded_judge_accepted_fast_path():
 
 def test_cascaded_judge_escalation_path():
     judge = FaithfulnessJudge()
-    
+
     llm_called = False
     def mock_llm_fn(state, questions):
         nonlocal llm_called

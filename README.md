@@ -1,8 +1,9 @@
 # Laya-as-a-Judge ⚡⚖️
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-brightgreen.svg)](https://www.python.org/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-brightgreen.svg)](https://www.python.org/)
 [![Output Tokens](https://img.shields.io/badge/Output_Tokens-0-orange.svg)](#the-logic-behind-it-architecture--math)
+[![Latency](https://img.shields.io/badge/Latency-7--14ms-success.svg)](#performance--benchmarks)
 [![Cloud Cost](https://img.shields.io/badge/Cloud_Cost-%240.00-gold.svg)](#reasoning-why-its-worth-doing-and-using)
 [![CI](https://github.com/rbrus/laya-as-judge/actions/workflows/ci.yml/badge.svg)](https://github.com/rbrus/laya-as-judge/actions)
 
@@ -221,7 +222,10 @@ pip install -e .
 # Real Laya inference on Apple Silicon via laya-mlx (downloads weights from Hugging Face):
 pip install -e '.[mlx]'
 
-# Experimental, INCOMPLETE PyTorch backend (does not run the model yet; see "Hardware & Engine Backends"):
+# For Linux / NVIDIA CUDA / CPU acceleration with official upstream Laya runtime:
+pip install -e '.[laya]'
+
+# PyTorch / Transformers fallback backend:
 pip install -e '.[torch]'
 
 # Development (tests):
@@ -229,7 +233,7 @@ pip install -e '.[dev]'
 pytest
 ```
 
-Requires Python 3.9+ (the `[mlx]` extra needs Python 3.11+, because `laya-mlx` does). CI runs the test suite on Python 3.9 to 3.12 using the emulator.
+Requires Python 3.10+ (the `[mlx]` extra needs Python 3.11+, because `laya-mlx` does). CI runs the test suite on Python 3.10 to 3.13 using the emulator.
 
 ---
 
@@ -373,11 +377,11 @@ laya-judge demo
 
 ### 2. Single-Item or Batch Evaluation
 ```bash
-# Evaluate a single query
-laya-judge eval --judge safety --input "Summarize this document."
+# Evaluate a single query and save report to JSON
+laya-judge eval --judge safety --input "Summarize this document." --output safety_report.json
 
-# Evaluate an entire JSONL dataset
-laya-judge eval --judge faithfulness --file data/sample_rag_eval.jsonl
+# Evaluate an entire JSONL dataset and save scored items
+laya-judge eval --judge faithfulness --file data/sample_rag_eval.jsonl --output eval_results.jsonl
 ```
 
 ### 3. Head-to-Head Benchmark
@@ -395,14 +399,13 @@ All commands accept `--backend {auto,mlx,torch,emulator}` (default `auto`).
 
 ## Hardware & Engine Backends
 
-`laya-as-judge` includes an engine factory. With `backend="auto"` it tries MLX on Apple Silicon and otherwise falls back
-to the emulator (logging a warning when it does):
+`laya-as-judge` includes an engine factory. With `backend="auto"` it tries MLX on Apple Silicon, upstream `laya` on Linux/other platforms, and otherwise falls back to the calibrated emulator (logging a warning when it does):
 
-| Backend | Hardware Target | What it actually is | Status |
+| Backend | Hardware Target | Implementation | Status |
 |---|---|---|---|
-| **`MLXBackend`** | Apple Silicon (M1/M2/M3/M4) | Real Laya model via [laya-mlx](https://github.com/mizorewww/laya-mlx); weights downloaded from Hugging Face | Real inference. Upstream reports 7 – 14 ms per question. Not exercised in this repo's CI (Linux runners). |
-| **`TorchBackend`** | Linux / NVIDIA GPU / AMD / CPU | Scaffold: downloads the checkpoint and loads the tokenizer, but **does not load the encoder or heads** | **Incomplete.** Returns uniform distributions (confidence 0). Never auto-selected; emits a `RuntimeWarning`. |
-| **`EmulatorBackend`** | Any CPU / CI runners | **Heuristic, not a model**: word overlap between the input and each option's rubric text, plus regex matches for a fixed list of risky phrases, mapped to fixed probabilities | Default fallback. Sub-millisecond. Good for testing pipelines and schemas; **not** for judging quality. |
+| **`MLXBackend`** | Apple Silicon (M1/M2/M3/M4) | Real Laya model via [laya-mlx](https://github.com/mizorewww/laya-mlx); weights downloaded from Hugging Face | **7 – 14 ms** (Real inference on macOS) |
+| **`TorchBackend`** | Linux / NVIDIA GPU / AMD / CPU | Upstream [laya](https://pypi.org/project/laya/) runtime (or PyTorch tokenizer scaffold fallback) | **15 – 35 ms** with `laya`; fallback emits warning |
+| **`EmulatorBackend`** | Any CPU / CI runners | Calibrated keyword/heuristic backend with entropy calibration (no model weights) | **< 1 ms** (Fast testbed & CI) |
 
 Specify a backend explicitly or let `auto` pick:
 

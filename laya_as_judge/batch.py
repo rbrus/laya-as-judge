@@ -12,6 +12,26 @@ from .judges.base import BaseJudge
 from .types import BatchEvaluationReport, EvaluationReport
 
 
+def _default_state_adapter(item: Any) -> Any:
+    """Normalize common evaluation schema synonyms (e.g. Ragas, TruLens, LangSmith)."""
+    if not isinstance(item, dict):
+        return item
+    d = dict(item)
+    # Question / query synonym
+    if "question" in d and "query" not in d:
+        d["query"] = d.pop("question")
+    # Contexts list synonym
+    if "contexts" in d and "context" not in d:
+        ctxs = d.pop("contexts")
+        d["context"] = "\n".join(ctxs) if isinstance(ctxs, list) else str(ctxs)
+    # Output / generation synonym for answer
+    if "output" in d and "answer" not in d and "response" not in d:
+        d["answer"] = d.pop("output")
+    elif "generation" in d and "answer" not in d and "response" not in d:
+        d["answer"] = d.pop("generation")
+    return d
+
+
 class BatchEvaluator:
     """High-throughput batch evaluator for datasets, test suites, and CI/CD runs."""
 
@@ -36,9 +56,11 @@ class BatchEvaluator:
         latencies: List[float] = []
         total_input_tokens = 0
 
+        extractor = state_extractor or _default_state_adapter
+
         total_items = len(items)
         for i, item in enumerate(items):
-            state = state_extractor(item) if state_extractor else item
+            state = extractor(item)
             report = self.judge.evaluate(state)
             reports.append(report)
             latencies.append(report.latency_ms)
@@ -72,17 +94,31 @@ class BatchEvaluator:
         self,
         file_path: Union[str, Path],
         state_extractor: Optional[Callable[[Dict[str, Any]], Any]] = None,
+        output_path: Optional[Union[str, Path]] = None,
     ) -> BatchEvaluationReport:
-        """Evaluate a JSONL file containing evaluation samples."""
+        """Evaluate a JSONL file containing evaluation samples.
+        
+        Args:
+            file_path: Path to input JSONL file.
+            state_extractor: Optional callable to extract/adapt state from JSON record.
+            output_path: Optional path to save evaluated results as JSONL.
+        """
         path = Path(file_path).expanduser()
         if not path.is_file():
             raise FileNotFoundError(f"JSONL file not found: {path}")
 
         items = []
         with open(path, "r", encoding="utf-8") as f:
-            for line in f:
+            for line_no, line in enumerate(f, start=1):
                 line = line.strip()
-                if line:
+                if not line:
+                    continue
+                try:
                     items.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Invalid JSON at line {line_no} in {path}: {e}") from e
 
-        return self.evaluate_items(items, state_extractor=state_extractor)
+        report = self.evaluate_items(items, state_extractor=state_extractor)
+        if output_path:
+            report.save_jsonl(output_path)
+        return report

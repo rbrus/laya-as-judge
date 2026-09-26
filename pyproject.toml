@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "laya-as-judge"
-version = "0.1.0"
+version = "0.2.0"
 description = "Fast, calibrated, token-free LLM & AI agent evaluation using Laya typed decision models instead of slow and expensive LLM-as-a-Judge"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [
@@ -29,10 +29,10 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Testing",
 ]
@@ -43,18 +43,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+laya = [
+    "laya>=0.3.0",
+]
 mlx = [
     "mlx>=0.16.0; sys_platform == 'darwin'",
     "laya-mlx>=0.2.0; sys_platform == 'darwin'",
 ]
 torch = [
+    "laya>=0.3.0",
     "torch>=2.0.0",
     "transformers>=4.40.0",
     "safetensors>=0.4.0",
     "huggingface-hub>=0.20.0",
 ]
 all = [
-    "laya-as-judge[mlx,torch]",
+    "laya-as-judge[mlx,torch,laya]",
 ]
 dev = [
     "pytest>=7.0.0",
@@ -68,6 +72,7 @@ laya-judge = "laya_as_judge.cli:main"
 Homepage = "https://github.com/rbrus/laya-as-judge"
 Repository = "https://github.com/rbrus/laya-as-judge"
 "Bug Tracker" = "https://github.com/rbrus/laya-as-judge/issues"
+"Laya PyPI Package" = "https://pypi.org/project/laya/"
 "Laya MLX Runtime" = "https://github.com/mizorewww/laya-mlx"
 
 [tool.setuptools.packages.find]
@@ -77,3 +82,4 @@ include = ["laya_as_judge*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+addopts = "-v"

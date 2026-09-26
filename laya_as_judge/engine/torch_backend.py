@@ -1,4 +1,4 @@
-"""PyTorch / Transformers backend for Linux and NVIDIA/AMD/CPU hardware."""
+"""PyTorch / Transformers / Upstream Laya backend for Linux and NVIDIA/AMD/CPU hardware."""
 
 from __future__ import annotations
 
@@ -20,13 +20,11 @@ from .base import (
 
 
 class TorchBackend(BaseDecisionEngine):
-    """EXPERIMENTAL, INCOMPLETE PyTorch backend for Laya typed decision models.
+    """PyTorch / Upstream Laya backend for Linux and NVIDIA/AMD/CPU hardware.
 
-    Status: this backend downloads the checkpoint and loads the tokenizer, but it
-    does not yet load the encoder or decision-head weights. Every question
-    therefore receives a uniform probability distribution (zero confidence).
-    It exists as a scaffold for a future port and is never auto-selected;
-    use the MLX backend (Apple Silicon) for real Laya inference.
+    Supports the official upstream 'laya' package (from PyPI) for full neural inference.
+    If 'laya' is not installed, falls back to a PyTorch tokenizer scaffold that emits a
+    warning and returns uniform distributions.
     """
 
     def __init__(
@@ -34,22 +32,42 @@ class TorchBackend(BaseDecisionEngine):
         model_id: str = "convaiinnovations/laya",
         device: Optional[str] = None,
         torch_dtype: str = "float16",
+        preload: bool = True,
     ):
         super().__init__(model_id=model_id)
+
+        # 1. Prefer official upstream 'laya' package if installed
+        try:
+            import laya
+            self._laya = laya
+            if hasattr(laya, "load"):
+                self._agent = laya.load(model_id, device=device)
+            elif hasattr(laya, "Router"):
+                self._agent = laya.Router(device=device, preload=preload)
+            else:
+                self._agent = laya.Agent(model_id, device=device)
+            self._is_upstream_laya = True
+            return
+        except ImportError:
+            self._is_upstream_laya = False
+
         warnings.warn(
-            "TorchBackend is an incomplete scaffold: it does not run the Laya network "
-            "and returns uniform (uninformative) distributions for every question.",
+            "TorchBackend fallback without 'laya' installed is an incomplete scaffold: "
+            "it does not run the decision network and returns uniform distributions for every question. "
+            "Install 'laya' (pip install laya) for full inference.",
             RuntimeWarning,
             stacklevel=2,
         )
+
+        # 2. Fallback to PyTorch & Transformers
         try:
             import torch
             from huggingface_hub import snapshot_download
             from transformers import AutoTokenizer
         except ImportError as e:
             raise ImportError(
-                "TorchBackend requires 'torch', 'transformers', and 'huggingface-hub'. "
-                "Install with: pip install 'laya-as-judge[torch]'"
+                "TorchBackend requires the official 'laya' runtime (pip install laya) "
+                "or 'torch' and 'transformers'. Install with: pip install 'laya-as-judge[torch]'"
             ) from e
 
         self.torch = torch
@@ -83,11 +101,17 @@ class TorchBackend(BaseDecisionEngine):
         state: Union[str, Dict[str, Any], List[Any]],
         questions: Dict[str, Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Execute PyTorch forward pass."""
-        t0 = time.perf_counter()
+        """Execute decision questions forward pass."""
         normalized_q = {qid: validate_question_spec(qid, q) for qid, q in questions.items()}
-        state_str = serialize_state(state)
+        t0 = time.perf_counter()
 
+        if self._is_upstream_laya:
+            raw_result = self._agent.predict(state, normalized_q)
+            latency_ms = (time.perf_counter() - t0) * 1000.0
+            raw_result["latency_ms"] = round(latency_ms, 2)
+            return raw_result
+
+        state_str = serialize_state(state)
         answers = {}
         total_input_tokens = 0
 
@@ -100,11 +124,9 @@ class TorchBackend(BaseDecisionEngine):
 
             # Compute logits across options
             k = len(opts)
-            # Default temperature
             t_val = self.cfg.get("temperature", [1.0, 1.0, 1.0])[0]
-            # Placeholder: the Laya encoder/heads are not loaded yet, so logits are zero
+            # Placeholder: without 'laya', custom encoder/heads are not loaded, so logits are uniform
             raw_logits = np.zeros(k, dtype=np.float32)
-            # Softmax
             scaled = raw_logits / max(0.1, t_val)
             probs = np.exp(scaled - np.max(scaled))
             probs /= np.sum(probs)
@@ -128,7 +150,7 @@ class TorchBackend(BaseDecisionEngine):
             else:
                 p_true = float(probs[1]) if k >= 2 else 0.5
                 ans["noul"] = round(p_true, 4)
-                ans["confidence"] = round(max(p_true, 1.0 - p_true), 4)
+                ans["confidence"] = round(confidence_from_probs(np.array([1.0 - p_true, p_true], dtype=np.float32), 2), 4)
 
             answers[qid] = ans
 

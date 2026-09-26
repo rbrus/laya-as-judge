@@ -56,9 +56,15 @@ def get_engine(
             except Exception as e:
                 logger.debug("MLX backend not available on Darwin: %s", e)
 
-        # 2. PyTorch is deliberately NOT auto-selected: TorchBackend does not yet run
-        #    the Laya network (see torch_backend.py). Request it explicitly with
-        #    backend="torch" if you want to work on it.
+        # 2. Check for upstream Laya runtime
+        try:
+            import laya  # noqa: F401
+            from .torch_backend import TorchBackend
+            mid = model_id or "convaiinnovations/laya"
+            logger.info("Auto-detected Laya runtime: Initializing Torch/Laya backend.")
+            return TorchBackend(model_id=mid, **kwargs)
+        except Exception as e:
+            logger.debug("Laya runtime not available: %s", e)
 
         # 3. Fallback to the heuristic EmulatorBackend (no model weights involved)
         global _EMULATOR_NOTICE_SHOWN
@@ -66,9 +72,9 @@ def get_engine(
             _EMULATOR_NOTICE_SHOWN = True
             logger.warning(
                 "laya-as-judge: no Laya model runtime found; using EmulatorBackend. "
-                "The emulator is a keyword/regex heuristic, NOT the Laya model: its "
+                "The emulator is a calibrated keyword/heuristic backend, NOT the full Laya neural model: its "
                 "verdicts and probabilities are illustrative only. Install "
-                "'laya-as-judge[mlx]' on Apple Silicon for real model inference."
+                "'laya-as-judge[mlx]' on Apple Silicon or 'laya' for real model inference."
             )
         mid = model_id or "convaiinnovations/laya-emulator"
         return EmulatorBackend(model_id=mid, **kwargs)

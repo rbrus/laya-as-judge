@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -10,6 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from . import __version__
 from .batch import BatchEvaluator
 from .benchmark import BenchmarkRunner
 from .judges import (
@@ -35,7 +37,7 @@ JUDGE_REGISTRY = {
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="laya-judge")
+@click.version_option(version=__version__, prog_name="laya-judge")
 def main():
     """Laya-as-a-Judge: Ultra-fast, token-free, calibrated evaluation for LLMs & AI agents."""
     pass
@@ -72,7 +74,15 @@ def main():
     default="auto",
     help="Inference engine backend.",
 )
-def eval(judge: str, input_text: Optional[str], file_path: Optional[str], backend: str):
+@click.option(
+    "--output",
+    "-o",
+    "output_path",
+    type=click.Path(),
+    default=None,
+    help="Output file path (JSON or JSONL) to save evaluation results.",
+)
+def eval(judge: str, input_text: Optional[str], file_path: Optional[str], backend: str, output_path: Optional[str]):
     """Evaluate an input state or batch JSONL file."""
     judge_cls = JUDGE_REGISTRY[judge]
     judge_instance = judge_cls(backend=backend)
@@ -83,7 +93,7 @@ def eval(judge: str, input_text: Optional[str], file_path: Optional[str], backen
             f"({type(judge_instance.engine).__name__}) on {file_path}...[/bold green]"
         )
         batch_evaluator = BatchEvaluator(judge=judge_instance)
-        report = batch_evaluator.evaluate_jsonl(file_path)
+        report = batch_evaluator.evaluate_jsonl(file_path, output_path=output_path)
 
         table = Table(title="Batch Evaluation Summary")
         table.add_column("Metric", style="cyan", no_wrap=True)
@@ -98,6 +108,8 @@ def eval(judge: str, input_text: Optional[str], file_path: Optional[str], backen
         table.add_row("Estimated Time Saved", f"[bold green]{report.estimated_time_saved_seconds:.1f} s[/bold green]")
 
         console.print(table)
+        if output_path:
+            console.print(f"[bold green]Saved batch results to {output_path}[/bold green]")
         return
 
     # Single item eval
@@ -156,6 +168,11 @@ def eval(judge: str, input_text: Optional[str], file_path: Optional[str], backen
         )
 
     console.print(table)
+    if output_path:
+        out_file = Path(output_path).expanduser()
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        out_file.write_text(report.to_json())
+        console.print(f"[bold green]Saved evaluation report to {output_path}[/bold green]")
 
 
 @main.command()
